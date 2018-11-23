@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crypto;
     use hex;
     use base64;
 
@@ -17,7 +18,7 @@ mod tests {
         const IN_2: &str = "686974207468652062756c6c277320657965";
         const OUT: &str = "746865206b696420646f6e277420706c6179";
 
-        assert_eq!(hex::xor(&hex::decode(IN_1).unwrap(), &hex::decode(IN_2).unwrap()),
+        assert_eq!(crypto::fixed_xor(&hex::decode(IN_1).unwrap(), &hex::decode(IN_2).unwrap()),
                    hex::decode(OUT).unwrap());
     }
 
@@ -27,28 +28,82 @@ mod tests {
         const KEY: u8 = 88;
         const OUT: &str = "Cooking MC's like a pound of bacon";
 
-        println!("{}", hex::find_key(IN));
+        assert_eq!(crypto::find_key(&hex::decode(IN).unwrap()), KEY);
+        assert_eq!(std::str::from_utf8(&crypto::decrypt(&hex::decode(IN).unwrap(), KEY)).unwrap(), OUT);
+    }
+}
 
-        assert_eq!(hex::find_key(IN), KEY);
-        assert_eq!(std::str::from_utf8(&hex::decipher(&hex::decode(IN).unwrap(), KEY)).unwrap(), OUT);
+pub mod crypto {
+    static COMMON_UPPER: [char; 12] = [
+        'E', 'T', 'A', 'O', 'I', 'N',
+        'S', 'H', 'R', 'D', 'L', 'U',
+    ];
+
+    static COMMON_LOWER: [char; 12] = [
+        'e', 't', 'a', 'o', 'i', 'n',
+        's', 'h', 'r', 'd', 'l', 'u',
+    ];
+
+    pub fn fixed_xor(xs: &[u8], ys: &[u8]) -> Vec<u8> {
+        Iterator::zip(xs.iter(), ys.iter())
+            .map(|(x, y)| x ^ y)
+            .collect()
+    }
+
+    pub fn repeating_xor(plaintext: &[u8], key: &[u8]) -> Vec<u8> {
+        Iterator::zip(key.iter().cycle(), plaintext.iter())
+            .map(|(x, y)| x ^ y)
+            .collect()
+    }
+
+    pub fn decrypt(bytes: &[u8], key: u8) -> Vec<u8> {
+        let key: [u8; 1] = [key];
+        repeating_xor(bytes, &key)
+    }
+
+    pub fn score_str(s: &str) -> usize {
+        let mut score = 0;
+
+        for c in s.bytes() {
+            if COMMON_UPPER.contains(&(c as char)) || c == ' ' as u8 {
+                score = score + 1;
+            } else if COMMON_LOWER.contains(&(c as char)) {
+                score = score + 2;
+            }
+        }
+
+        score
+    }
+
+    pub fn find_key(bytes: &[u8]) -> u8 {
+        let mut max_score = 0;
+        let mut out = 0;
+
+        for key in 1..128 {
+            let d = decrypt(&bytes, key);
+
+            let s = match std::str::from_utf8(&d) {
+                Ok(v) => v,
+                Err(_) => ""
+            };
+
+            let score = score_str(&s);
+
+            if score > max_score {
+                out = key;
+                max_score = score;
+            }
+        }
+
+        out
     }
 }
 
 pub mod hex {
-    use std;
+
     static TABLE: [char; 16] = [
         '0', '1', '2', '3', '4', '5', '6', '7',
         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-    ];
-
-    static COMMON_UPPER: [u8; 12] = [
-        'E' as u8, 'T' as u8, 'A' as u8, 'O' as u8, 'I' as u8, 'N' as u8,
-        'S' as u8, 'H' as u8, 'R' as u8, 'D' as u8, 'L' as u8, 'U' as u8,
-    ];
-
-    static COMMON_LOWER: [u8; 12] = [
-        'e' as u8, 't' as u8, 'a' as u8, 'o' as u8, 'i' as u8, 'n' as u8,
-        's' as u8, 'h' as u8, 'r' as u8, 'd' as u8, 'l' as u8, 'u' as u8,
     ];
 
     pub fn decode(mut s: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
@@ -69,65 +124,6 @@ pub mod hex {
         for byte in bytes {
             out.push(TABLE[(byte >> 4) as usize]);
             out.push(TABLE[(byte & 0b1111) as usize]);
-        }
-
-        out
-    }
-
-    pub fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
-        let mut out = vec![];
-        let c = a.iter().zip(b.iter());
-
-        for i in c {
-            out.push(i.0 ^ i.1);
-        }
-
-        out
-    }
-
-    pub fn decipher(bytes: &[u8], key: u8) -> Vec<u8> {
-        let mut out = vec![];
-
-        for byte in bytes {
-            out.push(byte ^ key);
-        }
-
-        out
-    }
-
-    pub fn score_str(s: &str) -> usize {
-        let mut score = 0;
-
-        for c in s.bytes() {
-            if COMMON_UPPER.contains(&c) || c == ' ' as u8 {
-                score = score + 1;
-            } else if COMMON_LOWER.contains(&c) {
-                score = score + 2;
-            }
-        }
-
-        score
-    }
-
-    pub fn find_key(s: &str) -> u8 {
-        let in_bytes: Vec<u8> = decode(s).unwrap();
-        let mut max_score = 0;
-        let mut out = 0;
-
-        for key in 1..128 {
-            let d = decipher(&in_bytes, key as u8);
-
-            let s = match std::str::from_utf8(&d) {
-                Ok(v) => v,
-                Err(_) => ""
-            };
-
-            let score = score_str(&s);
-
-            if score > max_score {
-                out = key;
-                max_score = score;
-            }
         }
 
         out
