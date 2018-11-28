@@ -28,8 +28,22 @@ mod tests {
         const KEY: u8 = 88;
         const OUT: &str = "Cooking MC's like a pound of bacon";
 
-        assert_eq!(crypto::find_key(&hex::decode(IN).unwrap()), KEY);
+        assert_eq!(crypto::find_key_score(&hex::decode(IN).unwrap()).0, KEY);
         assert_eq!(std::str::from_utf8(&crypto::decrypt(&hex::decode(IN).unwrap(), KEY)).unwrap(), OUT);
+    }
+
+    #[test]
+    fn s1c4() {
+        const KEY: u8 = 53;
+        const POS: usize = 170;
+        const OUT: &str = "Now that the party is jumping\n";
+
+        let test: Vec<Vec<u8>> = hex::ingest_file("./resources/s1c4.in");
+        let (vec, key, pos) = crypto::detect_1c_xor(&test);
+
+        assert_eq!(key, KEY);
+        assert_eq!(pos, POS);
+        assert_eq!(std::str::from_utf8(&crypto::decrypt(&vec, key)).unwrap(), OUT);
     }
 }
 
@@ -75,36 +89,76 @@ pub mod crypto {
         score
     }
 
-    pub fn find_key(bytes: &[u8]) -> u8 {
+    pub fn find_key_score(bytes: &[u8]) -> (u8, usize) {
         let mut max_score = 0;
-        let mut out = 0;
+        let mut out_key = 0;
 
         for key in 1..128 {
             let d = decrypt(&bytes, key);
 
             let s = match std::str::from_utf8(&d) {
-                Ok(v) => v,
+                Ok(s) => s,
                 Err(_) => ""
             };
 
             let score = score_str(&s);
 
             if score > max_score {
-                out = key;
+                out_key = key;
                 max_score = score;
+            }
+        }
+
+        (out_key, max_score)
+    }
+
+    pub fn detect_1c_xor(vv: &Vec<Vec<u8>>) -> (&Vec<u8>, u8, usize) {
+        let mut max_score = 0;
+        let mut out_key = 0;
+        let mut pos = 0;
+
+        for (k, v) in vv.iter().enumerate() {
+            let (key, score) = find_key_score(v);
+            if score > max_score {
+                max_score = score;
+                out_key = key;
+                pos = k;
+            }
+        }
+
+        (&vv[pos], out_key, pos)
+    }
+}
+
+pub mod hex {
+    static TABLE: [char; 16] = [
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+    ];
+
+    pub fn ingest_file(p: &str) -> Vec<Vec<u8>> {
+        use std::io::prelude::*;
+
+        let mut out: Vec<Vec<u8>> = vec![];
+
+        let path = std::path::Path::new(p);
+        let mut file = match std::fs::File::open(&path) {
+            Err(_) => panic!("Failed to open file."),
+            Ok(file) => file
+        };
+
+        let mut s = String::new();
+        match file.read_to_string(&mut s) {
+            Err(_) => panic!("Failed to read file."),
+            Ok(_) => {
+                for line in s.lines() {
+                    out.push(decode(line).unwrap());
+                }
             }
         }
 
         out
     }
-}
-
-pub mod hex {
-
-    static TABLE: [char; 16] = [
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-    ];
 
     pub fn decode(mut s: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
         let mut bytes = vec![];
