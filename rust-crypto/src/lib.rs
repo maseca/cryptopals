@@ -64,6 +64,14 @@ mod tests {
 
         assert_eq!(crypto::repeating_xor(IN.as_bytes(), key), hex::decode(OUT).unwrap());
     }
+
+    #[test]
+    fn s1c6() {
+        const B64: &str = "ABCDEFGHIJKLMNOPQRSTUVwxyz+";
+
+        let d = base64::decode(B64);
+        assert_eq!(base64::encode(&d), B64);
+    }
 }
 
 pub mod crypto {
@@ -181,6 +189,7 @@ pub mod hex {
 
     pub fn decode(mut s: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
         let mut bytes = vec![];
+
         while !s.is_empty() {
             let (head, tail) = s.split_at(2);
             s = tail;
@@ -214,6 +223,47 @@ pub mod base64 {
         'w', 'x', 'y', 'z', '0', '1', '2', '3',
         '4', '5', '6', '7', '8', '9', '+', '/'
     ];
+
+    pub fn decode(s: &str) -> Vec<u8> {
+        let mut out = vec![];
+        let mut s_bytes = vec![];
+
+        for c in s.trim_matches('=').bytes() {
+            let c = match c {
+                b'A'..=b'Z' => (c - b'A') as u8,
+                b'a'..=b'z' => (c - b'a' + 26) as u8,
+                b'+' => 62,
+                b'/' => 63,
+                _ => 0
+            };
+
+            s_bytes.push(c);
+        }
+
+        let mut extra = vec![];
+        while s_bytes.len() % 4 != 0 {
+            extra.push(s_bytes.pop().unwrap());
+        }
+
+        for bytes in s_bytes.chunks(4) {
+            out.push((bytes[0] << 2) ^ (bytes[1] >> 6));
+            out.push((bytes[1] << 4) ^ (bytes[2] >> 2));
+            out.push((bytes[2] << 6) ^ bytes[3]);
+        }
+
+        if extra.len() == 3 {
+            out.push((extra[2] << 2) ^ (extra[1] >> 6));
+            out.push((extra[1] << 4) ^ (extra[0] >> 2));
+            out.push(extra[0] << 6);
+        } else if extra.len() == 2 {
+            out.push((extra[1] << 2) ^ (extra[0] >> 6));
+            out.push(extra[0] << 4);
+        } else if extra.len() == 1 {
+            out.push(extra[0] << 2);
+        }
+
+        out
+    }
 
     pub fn encode(mut bytes: &[u8]) -> String {
         let mut s = String::new();
