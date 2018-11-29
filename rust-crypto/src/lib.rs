@@ -6,8 +6,10 @@ mod tests {
 
     #[test]
     fn s1c1() {
-        const IN: &str = "49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
-        const OUT: &str = "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t";
+        const IN: &str = "49276d206b696c6c696e6720796f757220627261696e206c696b\
+                          65206120706f69736f6e6f7573206d757368726f6f6d";
+        const OUT: &str = "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3V\
+                           zIG11c2hyb29t";
 
         assert_eq!(base64::encode(&hex::decode(IN).unwrap()), OUT);
     }
@@ -18,17 +20,21 @@ mod tests {
         const IN_2: &str = "686974207468652062756c6c277320657965";
         const OUT: &str = "746865206b696420646f6e277420706c6179";
 
-        assert_eq!(crypto::fixed_xor(&hex::decode(IN_1).unwrap(), &hex::decode(IN_2).unwrap()),
+        assert_eq!(crypto::fixed_xor(&hex::decode(IN_1).unwrap(),
+                                     &hex::decode(IN_2).unwrap()),
                    hex::decode(OUT).unwrap());
     }
 
     #[test]
     fn s1c3() {
-        const IN: &str = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
+        const IN: &str = "1b37373331363f78151b7f2b783431333d78397828372d363c783\
+                          73e783a393b3736";
         const KEY: u8 = 88;
         const OUT: &str = "Cooking MC's like a pound of bacon";
 
-        assert_eq!(crypto::find_key_score(&hex::decode(IN).unwrap()).0, KEY);
+        let key = crypto::find_key_score(&hex::decode(IN).unwrap()).0;
+
+        assert_eq!(key, KEY);
         assert_eq!(std::str::from_utf8(&crypto::decrypt(&hex::decode(IN).unwrap(), KEY)).unwrap(), OUT);
     }
 
@@ -43,7 +49,20 @@ mod tests {
 
         assert_eq!(key, KEY);
         assert_eq!(pos, POS);
-        assert_eq!(std::str::from_utf8(&crypto::decrypt(&vec, key)).unwrap(), OUT);
+        assert_eq!(crypto::decrypt(&vec, key), OUT.as_bytes());
+    }
+
+    #[test]
+    fn s1c5() {
+        const IN: &str = "Burning 'em, if you ain't quick and nimble\n\
+                          I go crazy when I hear a cymbal";
+        const OUT: &str = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63\
+                           343c2a26226324272765272a282b2f20430a652e2c652a312433\
+                           3a653e2b2027630c692b20283165286326302e27282f";
+
+        let key: &[u8] = "ICE".as_bytes();
+
+        assert_eq!(crypto::repeating_xor(IN.as_bytes(), key), hex::decode(OUT).unwrap());
     }
 }
 
@@ -58,14 +77,14 @@ pub mod crypto {
         's', 'h', 'r', 'd', 'l', 'u',
     ];
 
-    pub fn fixed_xor(xs: &[u8], ys: &[u8]) -> Vec<u8> {
-        Iterator::zip(xs.iter(), ys.iter())
+    pub fn fixed_xor(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+        Iterator::zip(bytes.iter(), key.iter())
             .map(|(x, y)| x ^ y)
             .collect()
     }
 
-    pub fn repeating_xor(plaintext: &[u8], key: &[u8]) -> Vec<u8> {
-        Iterator::zip(key.iter().cycle(), plaintext.iter())
+    pub fn repeating_xor(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+        Iterator::zip(key.iter().cycle(), bytes.iter())
             .map(|(x, y)| x ^ y)
             .collect()
     }
